@@ -8,6 +8,11 @@ boundaries, public API shape, generated artifacts, and architectural invariants.
 `README.md` is the public SDK overview and usage guide. Keep it user-facing. Keep agent
 operational guidance in this file unless it belongs in the durable architecture document.
 
+`skills/moq-kit/` is the distributable agent skill for SDK consumers. It is consumed
+detached from this repo, so stale content is worse than none: changes to public APIs,
+defaults, or observable behavior must update `SKILL.md` or the matching platform reference
+in the same PR, and releases must bump the install versions in `README.md` (the skill's install snippets deliberately use a `<latest release>` placeholder so they cannot go stale).
+
 ## Generated Artifacts
 
 Never manually edit generated UniFFI bindings or binary artifacts. They are either resolved
