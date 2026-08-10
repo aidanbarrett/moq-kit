@@ -45,11 +45,18 @@ extension DVR {
     /// Start the resolver while live playback is active. Calling ``selection(for:)`` then maps a
     /// duration such as 15 seconds onto exact, already-advertised group boundaries for both tracks.
     public actor TimelineResolver {
-        private let broadcast: Moq.BroadcastConsumer
+        private enum Source {
+            case live(
+                broadcast: Moq.BroadcastConsumer,
+                videoTimeline: Moq.Timeline,
+                audioTimeline: Moq.Timeline
+            )
+            case snapshot
+        }
+
+        private let source: Source
         private let videoName: String
         private let audioName: String
-        private let videoTimeline: Moq.Timeline
-        private let audioTimeline: Moq.Timeline
         private let retainedEntryCount: Int
 
         private var videoEntries: [DVR.TimelineEntry] = []
@@ -86,15 +93,31 @@ extension DVR {
                 throw SessionError.invalidConfiguration(
                     "Audio track '\(audioTrackName)' has no DVR timeline")
             }
-            self.broadcast = catalog.mediaSource.consumer
+            self.source = .live(
+                broadcast: catalog.mediaSource.consumer,
+                videoTimeline: videoTimeline,
+                audioTimeline: audioTimeline
+            )
             self.videoName = videoTrackName
             self.audioName = audioTrackName
-            self.videoTimeline = videoTimeline
-            self.audioTimeline = audioTimeline
             self.retainedEntryCount = max(2, retainedEntryCount)
             KitLogger.dvr.debug(
                 "DVR timeline configured video=\(videoTrackName, privacy: .public) videoTimeline=\(videoTimeline.track, privacy: .public) videoTimescale=\(videoTimeline.timescale) audio=\(audioTrackName, privacy: .public) audioTimeline=\(audioTimeline.track, privacy: .public) audioTimescale=\(audioTimeline.timescale) retainedEntries=\(self.retainedEntryCount)"
             )
+        }
+
+        init(
+            videoTrackName: String,
+            audioTrackName: String,
+            videoEntries: [DVR.TimelinePoint],
+            audioEntries: [DVR.TimelinePoint]
+        ) {
+            self.source = .snapshot
+            self.videoName = videoTrackName
+            self.audioName = audioTrackName
+            self.retainedEntryCount = max(2, max(videoEntries.count, audioEntries.count))
+            self.videoEntries = videoEntries.map(DVR.TimelineEntry.init)
+            self.audioEntries = audioEntries.map(DVR.TimelineEntry.init)
         }
 
         /// Starts consuming both timeline indexes. Calling it more than once is a no-op.
@@ -104,8 +127,14 @@ extension DVR {
                     "DVR timeline start ignored because subscriptions are already running")
                 return
             }
+            guard
+                case .live(let broadcast, let videoTimeline, let audioTimeline) = source
+            else {
+                throw SessionError.invalidConfiguration(
+                    "A timeline snapshot resolver cannot start subscriptions")
+            }
             KitLogger.dvr.debug(
-                "DVR timeline subscribing videoTimeline=\(self.videoTimeline.track, privacy: .public) audioTimeline=\(self.audioTimeline.track, privacy: .public)"
+                "DVR timeline subscribing videoTimeline=\(videoTimeline.track, privacy: .public) audioTimeline=\(audioTimeline.track, privacy: .public)"
             )
             async let videoSubscription = broadcast.subscribeTimeline(videoTimeline)
             async let audioSubscription = broadcast.subscribeTimeline(audioTimeline)
@@ -276,6 +305,15 @@ extension DVR {
     struct TimelineEntry: Sendable, Equatable {
         let group: UInt64
         let timestampUs: UInt64
+
+        init(group: UInt64, timestampUs: UInt64) {
+            self.group = group
+            self.timestampUs = timestampUs
+        }
+
+        init(_ point: DVR.TimelinePoint) {
+            self.init(group: point.group, timestampUs: point.timestampUs)
+        }
 
         fileprivate var point: DVR.TimelinePoint {
             DVR.TimelinePoint(group: group, timestampUs: timestampUs)
