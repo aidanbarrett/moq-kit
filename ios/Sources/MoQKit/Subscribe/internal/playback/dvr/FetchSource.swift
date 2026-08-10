@@ -118,7 +118,8 @@ extension DVR {
                     fillPrefetchWindow()
                     guard !frames.isEmpty else { continue }
                     return DVR.FetchGroup(frames: frames, groupSequence: sequence)
-                } catch MoqError.NotFound {
+                } catch {
+                    guard Self.isUnavailableGroup(error) else { throw error }
                     // Retention is allowed to leave holes inside a requested DVR window.
                     let trackName = self.name
                     KitLogger.dvr.debug(
@@ -152,6 +153,17 @@ extension DVR {
 
         private func following(_ sequence: UInt64) -> UInt64? {
             sequence == groups.upperBound ? nil : sequence + 1
+        }
+
+        private static func isUnavailableGroup(_ error: Error) -> Bool {
+            switch error {
+            case MoqError.NotFound:
+                return true
+            case MoqError.Mux(message: let message):
+                return message.hasSuffix("remote error: code=13")
+            default:
+                return false
+            }
         }
     }
 

@@ -89,6 +89,64 @@ final class FetchSourceTests: XCTestCase {
         XCTAssertEqual(Set(groups), Set([4, 5, 6, 7]))
     }
 
+    func testCursorSkipsWrappedRemoteNotFoundMuxError() async throws {
+        let expectedFrame = Moq.MediaFrame(
+            payload: Data([0x03, 0x04]),
+            timestampUs: 9_000,
+            keyframe: true
+        )
+        let fetcher = DVR.MediaGroupFetcher { _, sequence, _ in
+            switch sequence {
+            case 8:
+                throw MoqError.Mux(message: "cmaf: moq: remote error: code=13")
+            case 9:
+                return [expectedFrame]
+            default:
+                XCTFail("Unexpected group \(sequence)")
+                return []
+            }
+        }
+        var cursor = DVR.TrackCursor(
+            name: "video",
+            groups: 8...9,
+            container: .loc,
+            fetcher: fetcher,
+            prefetchLimit: 2
+        )
+        defer { cursor.cancel() }
+
+        let group = try await cursor.next()
+
+        XCTAssertEqual(group?.frames, [expectedFrame])
+        XCTAssertEqual(group?.groupSequence, 9)
+        let end = try await cursor.next()
+        XCTAssertNil(end)
+    }
+
+    func testCursorPropagatesUnrelatedMuxError() async {
+        let expectedError = MoqError.Mux(message: "cmaf: moq: remote error: code=130")
+        let fetcher = DVR.MediaGroupFetcher { _, _, _ in
+            throw expectedError
+        }
+        var cursor = DVR.TrackCursor(
+            name: "video",
+            groups: 8...8,
+            container: .loc,
+            fetcher: fetcher,
+            prefetchLimit: 1
+        )
+        defer { cursor.cancel() }
+
+        do {
+            _ = try await cursor.next()
+            XCTFail("Expected the mux error to propagate")
+        } catch let error as MoqError {
+            XCTAssertEqual(error, expectedError)
+        } catch {
+            XCTFail("Unexpected error \(error)")
+        }
+    }
+
     func testCursorPrefetchesGroupsConcurrentlyAndDrainsThemInOrder() async throws {
         let concurrency = FetchConcurrency()
         let fetcher = DVR.MediaGroupFetcher { _, sequence, _ in
