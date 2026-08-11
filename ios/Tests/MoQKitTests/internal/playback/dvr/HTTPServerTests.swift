@@ -7,8 +7,8 @@ import XCTest
 final class HTTPServerTests: XCTestCase {
     func testParserIgnoresQueryAndRejectsMalformedRequest() {
         XCTAssertEqual(
-            DVR.HTTPServer.parse(Data("GET /session/master.m3u8?cache=1 HTTP/1.1\r\nHost: localhost\r\n\r\n".utf8)),
-            DVR.HTTPServer.Request(method: "GET", path: "/session/master.m3u8")
+            DVR.HTTPServer.parse(Data("GET /session/multivariant.m3u8?cache=1 HTTP/1.1\r\nHost: localhost\r\n\r\n".utf8)),
+            DVR.HTTPServer.Request(method: "GET", path: "/session/multivariant.m3u8")
         )
         XCTAssertNil(DVR.HTTPServer.parse(Data("not-http\r\n\r\n".utf8)))
     }
@@ -77,10 +77,12 @@ final class HTTPServerTests: XCTestCase {
         )
         defer { origin.stop() }
 
-        let baseURL = origin.masterPlaylistURL.deletingLastPathComponent()
-        let (master, masterResponse) = try await URLSession.shared.data(from: origin.masterPlaylistURL)
-        XCTAssertEqual((masterResponse as? HTTPURLResponse)?.statusCode, 200)
-        XCTAssertTrue(String(decoding: master, as: UTF8.self).contains("video.m3u8"))
+        let baseURL = origin.multivariantPlaylistURL.deletingLastPathComponent()
+        let (multivariant, multivariantResponse) = try await URLSession.shared.data(
+            from: origin.multivariantPlaylistURL
+        )
+        XCTAssertEqual((multivariantResponse as? HTTPURLResponse)?.statusCode, 200)
+        XCTAssertTrue(String(decoding: multivariant, as: UTF8.self).contains("video.m3u8"))
 
         let (videoPlaylist, _) = try await URLSession.shared.data(from: baseURL.appendingPathComponent("video.m3u8"))
         XCTAssertTrue(String(decoding: videoPlaylist, as: UTF8.self).contains("video/0.m4s"))
@@ -100,7 +102,9 @@ final class HTTPServerTests: XCTestCase {
                 OriginRequests.Value(track: "audio", group: 100),
             ])
 
-        let invalidURL = URL(string: "http://localhost:\(origin.masterPlaylistURL.port!)/invalid/master.m3u8")!
+        let invalidURL = URL(
+            string: "http://localhost:\(origin.multivariantPlaylistURL.port!)/invalid/multivariant.m3u8"
+        )!
         let (_, invalidResponse) = try await URLSession.shared.data(from: invalidURL)
         XCTAssertEqual((invalidResponse as? HTTPURLResponse)?.statusCode, 404)
     }

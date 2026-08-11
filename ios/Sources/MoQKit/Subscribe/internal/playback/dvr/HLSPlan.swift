@@ -82,6 +82,25 @@ extension DVR {
         private static func group(at timestampUs: UInt64, in entries: [DVR.TimelinePoint]) -> UInt64 {
             if timestampUs <= entries[0].timestampUs { return entries[0].group }
 
+            let indices = Self.bracketingIndices(for: timestampUs, in: entries)
+            guard timestampUs < entries[indices.upper].timestampUs else {
+                return entries[indices.upper].group
+            }
+
+            let lower = entries[indices.lower]
+            let upper = entries[indices.upper]
+            let elapsed = timestampUs - lower.timestampUs
+            let timeSpan = upper.timestampUs - lower.timestampUs
+            let groupSpan = upper.group - lower.group
+            let product = elapsed.multipliedFullWidth(by: groupSpan)
+            let scaled = timeSpan.dividingFullWidth(product).quotient
+            return lower.group + min(scaled, groupSpan - 1)
+        }
+
+        private static func bracketingIndices(
+            for timestampUs: UInt64,
+            in entries: [DVR.TimelinePoint]
+        ) -> (lower: Int, upper: Int) {
             var lowerIndex = 0
             var upperIndex = entries.count - 1
             while lowerIndex + 1 < upperIndex {
@@ -92,18 +111,7 @@ extension DVR {
                     lowerIndex = midpoint
                 }
             }
-            guard timestampUs < entries[upperIndex].timestampUs else {
-                return entries[upperIndex].group
-            }
-
-            let lower = entries[lowerIndex]
-            let upper = entries[upperIndex]
-            let elapsed = timestampUs - lower.timestampUs
-            let timeSpan = upper.timestampUs - lower.timestampUs
-            let groupSpan = upper.group - lower.group
-            let product = elapsed.multipliedFullWidth(by: groupSpan)
-            let scaled = timeSpan.dividingFullWidth(product).quotient
-            return lower.group + min(scaled, groupSpan - 1)
+            return (lowerIndex, upperIndex)
         }
     }
 
@@ -138,7 +146,11 @@ extension DVR {
             return lines.joined(separator: "\n") + "\n"
         }
 
-        static func masterPlaylist(videoCodec: String, audioCodec: String, bandwidth: UInt64?) -> String {
+        static func multivariantPlaylist(
+            videoCodec: String,
+            audioCodec: String,
+            bandwidth: UInt64?
+        ) -> String {
             let peakBandwidth = max(1, bandwidth ?? 1_000_000)
             return """
                 #EXTM3U

@@ -3,17 +3,17 @@ import os
 
 extension DVR {
     final class HLSOrigin: @unchecked Sendable {
-        let masterPlaylistURL: URL
+        let multivariantPlaylistURL: URL
 
         private let server: DVR.HTTPServer
         private let coordinator: DVR.SegmentCoordinator
 
         private init(
-            masterPlaylistURL: URL,
+            multivariantPlaylistURL: URL,
             server: DVR.HTTPServer,
             coordinator: DVR.SegmentCoordinator
         ) {
-            self.masterPlaylistURL = masterPlaylistURL
+            self.multivariantPlaylistURL = multivariantPlaylistURL
             self.server = server
             self.coordinator = coordinator
         }
@@ -28,7 +28,7 @@ extension DVR {
             let plan = coordinator.plan
             let router = HLSRouter(
                 token: token,
-                master: DVR.HLSManifest.masterPlaylist(
+                multivariant: DVR.HLSManifest.multivariantPlaylist(
                     videoCodec: videoCodec,
                     audioCodec: audioCodec,
                     bandwidth: bandwidth
@@ -49,11 +49,15 @@ extension DVR {
                 await router.response(for: request)
             }
             let port = try await server.start()
-            let url = URL(string: "http://localhost:\(port)/\(token)/master.m3u8")!
+            let url = URL(string: "http://localhost:\(port)/\(token)/multivariant.m3u8")!
             KitLogger.dvr.debug(
                 "DVR HLS presentation ready segments=\(plan.segments.count) durationUs=\(plan.durationUs) host=localhost port=\(port)"
             )
-            return DVR.HLSOrigin(masterPlaylistURL: url, server: server, coordinator: coordinator)
+            return DVR.HLSOrigin(
+                multivariantPlaylistURL: url,
+                server: server,
+                coordinator: coordinator
+            )
         }
 
         func stop() {
@@ -69,20 +73,20 @@ extension DVR {
 
 private actor HLSRouter {
     private let prefix: String
-    private let master: Data
+    private let multivariant: Data
     private let video: Data
     private let audio: Data
     private let coordinator: DVR.SegmentCoordinator
 
     init(
         token: String,
-        master: String,
+        multivariant: String,
         video: String,
         audio: String,
         coordinator: DVR.SegmentCoordinator
     ) {
         self.prefix = "/\(token)/"
-        self.master = Data(master.utf8)
+        self.multivariant = Data(multivariant.utf8)
         self.video = Data(video.utf8)
         self.audio = Data(audio.utf8)
         self.coordinator = coordinator
@@ -92,8 +96,8 @@ private actor HLSRouter {
         guard request.path.hasPrefix(prefix) else { return .notFound }
         let resource = String(request.path.dropFirst(prefix.count))
         switch resource {
-        case "master.m3u8":
-            return .ok(contentType: "application/vnd.apple.mpegurl", body: master)
+        case "multivariant.m3u8":
+            return .ok(contentType: "application/vnd.apple.mpegurl", body: multivariant)
         case "video.m3u8":
             return .ok(contentType: "application/vnd.apple.mpegurl", body: video)
         case "audio.m3u8":

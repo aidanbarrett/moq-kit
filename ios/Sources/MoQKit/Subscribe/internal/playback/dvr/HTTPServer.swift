@@ -48,7 +48,7 @@ extension DVR {
         typealias Handler = @Sendable (Request) async -> Response
 
         private let listener: NWListener
-        private let queue = DispatchQueue(label: "dev.moq.sdk.dvr-http")
+        private let queue = DispatchQueue(label: "\(KitLogger.subsystem).DVRHTTPServer")
         private let handler: Handler
         private let lock = NSLock()
         private var connections: [ObjectIdentifier: NWConnection] = [:]

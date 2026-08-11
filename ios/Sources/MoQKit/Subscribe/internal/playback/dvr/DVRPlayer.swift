@@ -76,7 +76,7 @@ extension DVR {
                     video: videoTrack.rawConfig.bitrate, audio: audioTrack.rawConfig.bitrate)
             )
             let asset = AVURLAsset(
-                url: origin.masterPlaylistURL,
+                url: origin.multivariantPlaylistURL,
                 options: [AVURLAssetPreferPreciseDurationAndTimingKey: true]
             )
 

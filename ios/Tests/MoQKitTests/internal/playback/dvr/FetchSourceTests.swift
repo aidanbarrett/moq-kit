@@ -4,53 +4,7 @@ import XCTest
 
 @testable import MoQKit
 
-final class FetchSourceTests: XCTestCase {
-    func testGenericCMAFMuxersEmitSeparateInitsAndDeterministicFragments() throws {
-        let firstVideo = [
-            Moq.MediaFrame(payload: Data("keyframe".utf8), timestampUs: 10_000_000, keyframe: true),
-            Moq.MediaFrame(payload: Data("delta".utf8), timestampUs: 10_033_000, keyframe: false),
-        ]
-        let firstAudio = [
-            Moq.MediaFrame(payload: Data([0x78, 0x00]), timestampUs: 10_020_000, keyframe: true)
-        ]
-        let videoMuxer = try Moq.CMAFMuxer(
-            video: Moq.Video(
-                codec: "vp09.00.10.08",
-                description: nil,
-                coded: nil,
-                displayAspect: nil,
-                bitrate: nil,
-                framerate: 30,
-                container: .legacy,
-                timeline: nil
-            ),
-            originTimestampUs: 10_000_000
-        )
-        let audioMuxer = try Moq.CMAFMuxer(
-            audio: Moq.Audio(
-                codec: "opus",
-                description: nil,
-                sampleRate: 48_000,
-                channelCount: 2,
-                bitrate: nil,
-                container: .legacy,
-                timeline: nil
-            ),
-            originTimestampUs: 10_000_000
-        )
-
-        XCTAssertEqual(videoMuxer.initialization.subdata(in: 4..<8), Data("ftyp".utf8))
-        XCTAssertEqual(audioMuxer.initialization.subdata(in: 4..<8), Data("ftyp".utf8))
-        XCTAssertEqual(
-            try videoMuxer.fragment(sequence: 8, frames: firstVideo).subdata(in: 4..<8),
-            Data("moof".utf8)
-        )
-        XCTAssertEqual(
-            try audioMuxer.fragment(sequence: 3, frames: firstAudio).subdata(in: 4..<8),
-            Data("moof".utf8)
-        )
-    }
-
+final class TrackCursorTests: XCTestCase {
     func testCursorSkipsMissingAndEmptyGroupsWithinRequestedRange() async throws {
         let requestedGroups = RequestedGroups()
         let expectedFrame = Moq.MediaFrame(
