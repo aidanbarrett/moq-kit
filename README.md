@@ -144,7 +144,7 @@ Add the Swift package and depend on the `MoQKit` product:
 ```swift
 .package(
     url: "https://github.com/software-mansion-labs/moq-kit",
-    from: "0.4.0"
+    from: "0.4.1"
 )
 ```
 
