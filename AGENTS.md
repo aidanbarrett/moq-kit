@@ -13,6 +13,26 @@ detached from this repo, so stale content is worse than none: changes to public 
 defaults, or observable behavior must update `SKILL.md` or the matching platform reference
 in the same PR, and releases must bump the install versions in `README.md` (the skill's install snippets deliberately use a `<latest release>` placeholder so they cannot go stale).
 
+## Release Tags
+
+Release tags are platform-specific, with one additional plain semantic-version tag for
+Swift Package Manager:
+
+- iOS releases require both `ios/vX.Y.Z` and `vX.Y.Z`, pointing at the same commit.
+  `ios/vX.Y.Z` triggers the iOS release workflow; the plain `vX.Y.Z` tag is the version
+  Swift Package Manager resolves and therefore always reflects the iOS release version.
+- Android releases use `android/vX.Y.Z`, which triggers the Android release workflow and
+  publishes version `X.Y.Z` to Maven Central.
+- When releasing both platforms together, create all three tags on the same release commit.
+  If platform versions diverge, do not move or reuse a tag: the plain `vX.Y.Z` tag follows
+  iOS, while Android keeps its independent `android/vX.Y.Z` sequence.
+
+Before tagging, update the matching iOS and Android install versions in `README.md`.
+Land that release-preparation commit on `main`, create the required tags at that exact
+commit, and push the tags to `origin`; creating tags only locally does not start the release
+workflows. After pushing, verify the `Release` workflow and the platform GitHub releases.
+The plain iOS/SwiftPM tag does not trigger a workflow by itself.
+
 ## Generated Artifacts
 
 Never manually edit generated UniFFI bindings or binary artifacts. They are either resolved
