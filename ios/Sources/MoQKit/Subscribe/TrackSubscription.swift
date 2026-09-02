@@ -26,6 +26,10 @@ public struct TrackObject: Sendable {
     public let groupSequence: UInt64
     /// The zero-based index of this object within its group.
     public let objectIndex: UInt64
+    /// The producer-stamped presentation timestamp in microseconds on the broadcast's shared
+    /// media timeline. It uses the same epoch as media-track frame timestamps and is carried on
+    /// the wire with each frame.
+    public let timestampUs: UInt64
 }
 
 // MARK: - TrackSubscription
@@ -212,7 +216,8 @@ public final class TrackSubscription: @unchecked Sendable {
                         TrackObject(
                             payload: frame.payload,
                             groupSequence: sequence,
-                            objectIndex: objectIndex
+                            objectIndex: objectIndex,
+                            timestampUs: frame.timestampUs
                         )
                     )
                     objectIndex += 1
