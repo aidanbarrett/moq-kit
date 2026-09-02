@@ -25,7 +25,7 @@ public final class DataTrackEmitter: @unchecked Sendable {
         clock = nil
     }
 
-    /// Publishes one object on the track.
+    /// Publishes one object stamped at emission time on the broadcast timeline.
     ///
     /// If the track has not started yet, or has already stopped, this is a no-op.
     public func send(_ data: Data) throws {
@@ -34,6 +34,25 @@ public final class DataTrackEmitter: @unchecked Sendable {
         // broadcast's media tracks.
         let now = CMClockGetTime(CMClockGetHostTimeClock())
         let timestampUs = clock?.timestampUs(from: now) ?? 0
+        try producer.writeFrame(data, timestampUs: timestampUs)
+    }
+
+    /// Returns the timestamp for a capture presentation time on the broadcast's shared media
+    /// timeline, using the same epoch as media-track frame timestamps.
+    ///
+    /// Returns `nil` until the broadcast epoch exists or while the emitter is detached. This
+    /// method never establishes the epoch itself.
+    public func mediaTimestampUs(from presentationTime: CMTime) -> UInt64? {
+        guard !stopped else { return nil }
+        return clock?.peekTimestampUs(from: presentationTime)
+    }
+
+    /// Publishes one object stamped with an explicit timestamp on the broadcast timeline.
+    ///
+    /// Use the value from ``mediaTimestampUs(from:)`` to co-time the object with a media frame.
+    /// If the track has not started yet, or has already stopped, this is a no-op.
+    public func send(_ data: Data, timestampUs: UInt64) throws {
+        guard !stopped, let producer else { return }
         try producer.writeFrame(data, timestampUs: timestampUs)
     }
 }
