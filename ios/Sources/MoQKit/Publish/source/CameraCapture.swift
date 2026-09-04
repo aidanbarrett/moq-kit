@@ -139,9 +139,23 @@ public final class CameraCapture: NSObject, FrameSource, @unchecked Sendable {
 
     /// The currently configured camera settings.
     public private(set) var camera: Camera
-    /// The device currently feeding the session, for zoom, focus and exposure control.
-    public var captureDevice: AVCaptureDevice? { currentInput?.device }
-    private var currentInput: AVCaptureDeviceInput?
+    /// The device currently feeding the session, for zoom, focus and exposure control. Safe to
+    /// read from any thread, including a frame callback: it mirrors the input under a lock
+    /// rather than hopping to the configuration queue, which the callback already occupies.
+    public var captureDevice: AVCaptureDevice? {
+        deviceLock.lock()
+        defer { deviceLock.unlock() }
+        return publishedDevice
+    }
+    private let deviceLock = NSLock()
+    private var publishedDevice: AVCaptureDevice?
+    private var currentInput: AVCaptureDeviceInput? {
+        didSet {
+            deviceLock.lock()
+            publishedDevice = currentInput?.device
+            deviceLock.unlock()
+        }
+    }
     private var currentOutput: AVCaptureVideoDataOutput?
     private var isConfigured = false
     private var isRunning = false

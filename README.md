@@ -144,7 +144,7 @@ Add the Swift package and depend on the `MoQKit` product:
 ```swift
 .package(
     url: "https://github.com/aidanbarrett/moq-kit",
-    exact: "0.4.2-zeti.4"
+    exact: "0.4.2-zeti.5"
 )
 ```
 
