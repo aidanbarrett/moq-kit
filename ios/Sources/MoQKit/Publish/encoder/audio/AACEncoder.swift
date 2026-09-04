@@ -5,6 +5,7 @@ import Foundation
 /// AAC encoder using `AVAudioConverter`.
 final class AACEncoder: AudioEncoding {
     private var converter: AVAudioConverter?
+    private var timeline: AudioPacketTimeline?
     private var resamplingConverter: AVAudioConverter?
 
     let config: AudioEncoderConfig
@@ -31,17 +32,30 @@ final class AACEncoder: AudioEncoding {
         }
 
         guard let converter else { return [] }
+        let outputSamplesPerPacket = Int64(
+            converter.outputFormat.streamDescription.pointee.mFramesPerPacket
+        )
+        if timeline == nil {
+            timeline = AudioPacketTimeline(
+                outputSampleRate: config.sampleRate, samplesPerPacket: outputSamplesPerPacket
+            )
+        }
+        if timeline?.observeInput(
+            presentationTime: pts,
+            frameCount: CMSampleBufferGetNumSamples(sampleBuffer),
+            sampleRate: inputASBD.mSampleRate
+        ) == true {
+            // The samples the converters carried belong to the timeline before the gap.
+            converter.reset()
+            resamplingConverter?.reset()
+        }
         guard let pcmBuffer = asPCMBuffer(sampleBuffer, targetFormat: converter.inputFormat) else {
             return []
         }
 
         var frames: [EncodedAudioFrame] = []
         var fed = false
-        let outputSamplesPerPacket = Int64(
-            converter.outputFormat.streamDescription.pointee.mFramesPerPacket
-        )
         let maximumPacketSize = max(converter.maximumOutputPacketSize, 4096)
-        var packetsDrained: Int64 = 0
 
         while true {
             let outputBuffer = AVAudioCompressedBuffer(
@@ -69,14 +83,10 @@ final class AACEncoder: AudioEncoding {
 
             guard outputBuffer.byteLength > 0, outputBuffer.packetCount > 0 else { break }
 
-            let offsetSeconds = Double(packetsDrained * outputSamplesPerPacket) / config.sampleRate
-            let currentPTS = CMTimeAdd(pts, CMTime(seconds: offsetSeconds, preferredTimescale: pts.timescale))
-            packetsDrained += 1
-
             frames.append(
                 EncodedAudioFrame(
                     data: Data(bytes: outputBuffer.data, count: Int(outputBuffer.byteLength)),
-                    presentationTime: currentPTS
+                    presentationTime: timeline?.nextPacketTime() ?? pts
                 )
             )
         }
@@ -90,6 +100,7 @@ final class AACEncoder: AudioEncoding {
 
     func stop() {
         converter = nil
+        timeline = nil
         resamplingConverter = nil
     }
 

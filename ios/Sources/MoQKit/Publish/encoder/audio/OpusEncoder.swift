@@ -6,6 +6,7 @@ import Foundation
 final class OpusEncoder: AudioEncoding {
     private var converter: AVAudioConverter?
     private var resamplingConverter: AVAudioConverter?
+    private var timeline: AudioPacketTimeline?
 
     let config: AudioEncoderConfig
 
@@ -31,6 +32,21 @@ final class OpusEncoder: AudioEncoding {
         }
 
         guard let converter else { return [] }
+        let outputSamplesPerPacket = Int64(converter.outputFormat.streamDescription.pointee.mFramesPerPacket)
+        if timeline == nil {
+            timeline = AudioPacketTimeline(
+                outputSampleRate: config.sampleRate, samplesPerPacket: outputSamplesPerPacket
+            )
+        }
+        if timeline?.observeInput(
+            presentationTime: pts,
+            frameCount: CMSampleBufferGetNumSamples(sampleBuffer),
+            sampleRate: inputASBD.mSampleRate
+        ) == true {
+            // The samples the converter carried belong to the timeline before the gap.
+            converter.reset()
+            resamplingConverter?.reset()
+        }
         guard let pcmBuffer = asPCMBuffer(sampleBuffer, targetFormat: converter.inputFormat) else {
             return []
         }
@@ -40,8 +56,6 @@ final class OpusEncoder: AudioEncoding {
         // more than one Opus packet.
         var frames: [EncodedAudioFrame] = []
         var fed = false
-        let outputSamplesPerPacket = Int64(converter.outputFormat.streamDescription.pointee.mFramesPerPacket)
-        var packetsDrained: Int64 = 0
 
         while true {
             guard
@@ -65,13 +79,9 @@ final class OpusEncoder: AudioEncoding {
 
             guard status != .error, outputBuffer.byteLength > 0 else { break }
 
-            let offsetSeconds = Double(packetsDrained * outputSamplesPerPacket) / config.sampleRate
-            let currentPTS = CMTimeAdd(pts, CMTime(seconds: offsetSeconds, preferredTimescale: pts.timescale))
-            packetsDrained += 1
-
             frames.append(EncodedAudioFrame(
                 data: Data(bytes: outputBuffer.data, count: Int(outputBuffer.byteLength)),
-                presentationTime: currentPTS
+                presentationTime: timeline?.nextPacketTime() ?? pts
             ))
         }
 
@@ -85,6 +95,7 @@ final class OpusEncoder: AudioEncoding {
     func stop() {
         converter = nil
         resamplingConverter = nil
+        timeline = nil
     }
 
     // MARK: - Private
