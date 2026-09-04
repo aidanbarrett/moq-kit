@@ -207,6 +207,7 @@ public final class CameraCapture: NSObject, FrameSource, @unchecked Sendable {
             }
             let device = try resolveDevice(for: newCamera)
             let newInput = try AVCaptureDeviceInput(device: device)
+            let previousPreset = captureSession.sessionPreset
 
             captureSession.beginConfiguration()
             captureSession.removeInput(oldInput)
@@ -221,9 +222,14 @@ public final class CameraCapture: NSObject, FrameSource, @unchecked Sendable {
             do {
                 try applyPreset(for: newCamera, to: device)
             } catch {
+                // Everything this transaction touched goes back: the input and the preset.
+                // The old device kept its own active format, so nothing else moved.
                 captureSession.removeInput(newInput)
                 if captureSession.canAddInput(oldInput) {
                     captureSession.addInput(oldInput)
+                }
+                if captureSession.canSetSessionPreset(previousPreset) {
+                    captureSession.sessionPreset = previousPreset
                 }
                 captureSession.commitConfiguration()
                 throw error
@@ -239,6 +245,7 @@ public final class CameraCapture: NSObject, FrameSource, @unchecked Sendable {
     }
 
     private func configureSession() throws {
+        let previousPreset = captureSession.sessionPreset
         captureSession.beginConfiguration()
         do {
             let device = try resolveDevice(for: camera)
@@ -272,6 +279,9 @@ public final class CameraCapture: NSObject, FrameSource, @unchecked Sendable {
             captureSession.commitConfiguration()
             isConfigured = true
         } catch {
+            if captureSession.canSetSessionPreset(previousPreset) {
+                captureSession.sessionPreset = previousPreset
+            }
             captureSession.commitConfiguration()
             resetSession()
             throw error
@@ -323,10 +333,11 @@ public final class CameraCapture: NSObject, FrameSource, @unchecked Sendable {
         guard captureSession.canSetSessionPreset(.inputPriority) else {
             throw SessionError.invalidConfiguration("The session cannot yield its preset to a device format")
         }
-        captureSession.sessionPreset = .inputPriority
         let duration = CameraFormatSelection.frameDuration(for: maxFrameRate)
+        // Lock before mutating the session so a refused lock leaves the preset untouched.
         try device.lockForConfiguration()
         defer { device.unlockForConfiguration() }
+        captureSession.sessionPreset = .inputPriority
         device.activeFormat = format
         device.activeVideoMinFrameDuration = duration
         device.activeVideoMaxFrameDuration = duration
